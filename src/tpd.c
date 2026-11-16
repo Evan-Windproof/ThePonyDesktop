@@ -14,14 +14,15 @@ static int clamp(int n,int max){return n<0?0:n>max?max:n;}
 __attribute__((noreturn)) void _start(void){
     long mode=call(4,0,0);
     if(mode<0){write_text("TPD: display or PS/2 mouse unavailable\n");finish();}
+    if(call(9,0,0)<0){write_text("TPD: buffered mode requires at most 1024x768\n");call(7,0,0);finish();}
     int w=mode&65535,h=(mode>>16)&65535,x=60,y=60,mx=w/2,my=h/2;
     int visible=1,drag=0,ox=0,oy=0,old=0,dirty=1;
-    write_text("TPD v0.1.0: Ring 3 desktop ready\n");
+    write_text("TPD v0.1.1: Ring 3 desktop ready\n");
     for(;;){
         if(dirty){
             rect(0,0,w,h,0x244754);
             rect(0,h-32,w,32,0x172932);
-            text(8,h-24,"TPD 0.1.0");text(w-96,h-24,"EXIT [Q]");
+            text(8,h-24,"TPD 0.1.1");text(w-96,h-24,"EXIT [Q]");
             if(visible){
                 rect(x,y,300,170,0x101820);rect(x+2,y+2,296,166,0xdee4e8);
                 rect(x+2,y+2,296,26,0x345c80);text(x+10,y+8,"DEMO WINDOW");
@@ -30,7 +31,7 @@ __attribute__((noreturn)) void _start(void){
                 label(x+12,y+54,"THE PONY DESKTOP",0x172932);label(x+12,y+80,"DRAG THE TITLE BAR",0x172932);
             }
             for(int i=0;i<12;i++)rect(mx,my+i,1+i/2,1,0xffffff);
-            dirty=0;
+            call(10,0,0);dirty=0;
         }
         long e=call(6,0,0);if(e<0)break;
         int nx=e&65535,ny=(e>>16)&65535,down=(e>>32)&1,key=(e>>40)&255;

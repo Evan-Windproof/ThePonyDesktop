@@ -1,2 +1,4 @@
 integration/*.patch -whitespace
 docs/evidence/serial.log -whitespace
+
+docs/evidence/**/serial.log -whitespace

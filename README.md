@@ -1,4 +1,4 @@
-# The Pony Desktop v0.1.0
+# The Pony Desktop v0.1.1
 
 HoofTTY 的实验性原生 Ring 3 图形桌面，以 C 实现，不使用宿主操作系统图形 API。
 
@@ -19,6 +19,11 @@ HoofTTY 现有加载器分配代码页和栈页，以 Ring 3 启动应用；显�
 
 详见 [源码审计与方案](docs/architecture.md)、[接口](docs/abi.md)、[测试记录](docs/validation.md)。
 
+## v0.1.1 修复
+
+参见 [v0.1.1 改动与实测](docs/v0.1.1.md)。保留 Ring 3 桌面逻辑，新增可选后备缓冲 ABI；改善 PS/2 输入延迟与按钮边沿保留。
+从 v0.1.0 升级请对**未应用旧接口补丁的 HoofTTY 基线检出**应用新补丁；脚本不会自动回滚或覆盖旧检出的本地修改。旧补丁保留供历史参考，勿叠加应用。
+
 ## 构建
 
 已核对的 HoofTTY 基线：`8d2951186df48773d6014290f08be9ebf0df8257`。
@@ -36,7 +41,7 @@ make test HOOFTTY=../HoofTTY
 make run HOOFTTY=../HoofTTY
 ```
 
-`make` 应用 [内核接口补丁](integration/hooftty-v0.1.0.patch)，复制应用源码后调用 HoofTTY 原有构建。
+`make` 应用 [内核接口补丁](integration/hooftty-v0.1.1.patch)，复制应用源码后调用 HoofTTY 原有构建。
 `integration/apply.sh` 可重复执行；补丁冲突、ABI 不匹配或已存在的不同 `apps/tpd.c` 会报错，避免覆盖修改。
 请先保存自己的改动。修改 TPD 后，需要自行核对并同步 `src/tpd.c` 到 HoofTTY 的 `apps/tpd.c`；脚本不会覆盖不同内容。
 更新版本的 HoofTTY 不保证能直接应用补丁，应先审阅接口差异。
@@ -62,13 +67,13 @@ hoof> run tpd
 - `docs/evidence/`：本次运行的串口、GDB、构建与结果记录。
 
 当前工作区的 `/workspace/HoofTTY` 已实际应用同一补丁，便于直接运行；移植到其他机器不依赖该目录快照。
-本次未向 GitHub 推送、未发布环境或 Release。
+代码及版本标签发布状态以仓库为准；不涉及云环境发布。
 
 ## 限制与后续方向
 
-仅支持 PC i8042 标准三字节 PS/2 鼠标、RGB 32bpp framebuffer；最低 400×300。
-输入是每约 10 ms 一次的状态快照，快速按下并释放可能合并；没有事件队列或滚轮/USB 输入。
-变化时整屏重绘，没有双缓冲，可能闪烁；不存在 GPU 加速、多窗口应用或多任务桌面。
+仅支持 PC i8042 标准三字节 PS/2 鼠标、RGB 32bpp framebuffer；支持 400×300 至 1024×768 的后备缓冲模式。
+输入保留有界按钮边沿队列，同按钮状态的移动合并；队列满时丢弃最旧状态，没有滚轮/USB 输入。
+用户应用仍构建完整画面，内核后备缓冲累积修改并按脏包围盒比较提交；没有垂直同步，仍可能撕裂。不存在 GPU 加速、多窗口应用或多任务桌面。
 提供单一演示窗口，ASCII 字体复用内核已有原创字形，没有第三方主题/图片。
 
 建议依次开发：显示会话故障与硬件兼容回归测试、带溢出语义的输入队列、脏矩形/双缓冲，

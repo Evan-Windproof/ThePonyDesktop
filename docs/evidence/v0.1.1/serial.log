@@ -1,0 +1,43 @@
+limine: Loading executable `boot():/boot/kernseed.elf`...
+HoofTTY OS - Beta0.3.0
+Independent x86-64 monolithic kernel
+HoofTTY OS - Beta0.3.0
+
+Welcome to HoofTTY!
+A pony-themed text operating system.
+
+
+HoofTTY Shell: type friendship
+hoof> echo baseline
+baseline
+hoof> run hello
+Hello from HoofTTY userspace!
+hoof> meminfo
+pages: usable=30749 free=30728 allocated=16 tables=5 mapped=16
+hoof> run tpd
+TPD v0.1.1: Ring 3 desktop ready
+TPD: drag begin
+TPD: drag end
+TPD: window closed
+TPD: returned to Shell
+hoof> echo restored
+restored
+hoof> meminfo
+pages: usable=30749 free=30728 allocated=16 tables=5 mapped=16
+hoof> run tpd
+TPD v0.1.1: Ring 3 desktop ready
+TPD: returned to Shell
+hoof> echo restored
+restored
+hoof> meminfo
+pages: usable=30749 free=30728 allocated=16 tables=5 mapped=16
+hoof> run tpd
+TPD v0.1.1: Ring 3 desktop ready
+TPD: returned to Shell
+hoof> meminfo
+pages: usable=30749 free=30728 allocated=16 tables=5 mapped=16
+hoof> run privileged
+User fault: task terminated
+hoof> echo healthy
+healthy
+hoof> 

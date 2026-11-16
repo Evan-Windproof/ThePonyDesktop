@@ -1,0 +1,1 @@
+PASS: boot, Shell, hello, desktop three times, CPL3 GDB evidence, resource reclamation, taskbar exit, pixels, mouse drag/close, q exit, Shell recovery, privileged fault containment.

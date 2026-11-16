@@ -58,10 +58,17 @@ with tempfile.TemporaryDirectory(prefix='tpd-') as d:
                     # Break movement into PS/2-range packets. Title starts at 60,60.
                     move(-100,-100);move(-100,-100);move(-100,-25)
                     button(True);wait_for(lambda:'TPD: drag begin' in serial.read_text(),p,'title drag')
+                    for i in range(40):
+                        q.command('input-send-event',{'events':[{'type':'rel','data':{'axis':'x','value':3 if i%2==0 else -3}}]})
+                        time.sleep(.01)
+                        if i%10==0:
+                            px=screen('continuous'+str(i));assert px(200,160)!=bytes.fromhex('244754'),'blank intermediate window'
                     move(100,80);button(False)
                     px=screen('dragged');assert px(65,65)==bytes.fromhex('244754');assert px(165,145)==bytes.fromhex('345c80')
                     move(100,0);move(100,0);move(40,0) # cursor now 440,155; close at 432..454
-                    button(True);button(False)
+                    q.command('input-send-event',{'events':[{'type':'btn','data':{'down':True,'button':'left'}}]})
+                    time.sleep(.02)
+                    q.command('input-send-event',{'events':[{'type':'btn','data':{'down':False,'button':'left'}}]})
                     wait_for(lambda:'TPD: window closed' in serial.read_text(),p,'close button')
                     px=screen('closed');assert px(165,145)==bytes.fromhex('244754')
                 n=len(serial.read_text());key('q')

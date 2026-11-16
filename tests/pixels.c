@@ -20,6 +20,11 @@ int main(void){
     pixels_glyph(0,0,255,0xffffff);
     for(unsigned y=0;y<32;y++)for(unsigned x=32;x<40;x++)assert(storage[3+y*40+x]==0xdeadbeef);
     for(unsigned i=0;i<3;i++){assert(storage[i]==0xdeadbeef);assert(storage[3+40*32+i]==0xdeadbeef);}
+    assert(pixels_begin()==0);assert(pixels_begin()==-16);
+    pixels_rect(0,0,2,2,0x123456);assert(storage[3]==0);
+    assert(pixels_present()==0);assert(storage[3]==0x563412);
+    assert(pixels_present()==0);pixels_end();assert(pixels_present()==-1);
+    framebuffer_clear();
     pixels_pause(true);framebuffer_putc('X');assert(storage[3]==0);
     pixels_pause(false);framebuffer_putc('X');assert(storage[3]!=0);
     puts("PASS graphics: clipping, padding canaries, RGB masks, invalid glyph, terminal suspension");

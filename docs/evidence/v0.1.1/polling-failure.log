@@ -1,0 +1,46 @@
+make: Entering directory '/workspace/ThePonyDesktop'
+./integration/apply.sh "../HoofTTY"
+HoofTTY interface patch already applied
+TPD integrated; run make iso check in HoofTTY
+make -C ../HoofTTY iso check
+make[1]: Entering directory '/workspace/HoofTTY'
+HOST_CC="cc" ./scripts/fetch-limine.sh
+limine.h: OK
+limine.c: OK
+limine-bios-hdd.h: OK
+limine-bios.sys: OK
+limine-bios-cd.bin: OK
+limine-uefi-cd.bin: OK
+BOOTX64.EFI: OK
+LICENSE: OK
+make[2]: Entering directory '/workspace/HoofTTY/.cache/limine'
+make[2]: 'limine' is up to date.
+make[2]: Leaving directory '/workspace/HoofTTY/.cache/limine'
+python3 tests/check_elf.py build/kernseed.elf
+PASS ELF: static x86-64, no unresolved symbols, no RWX segment
+make[1]: Leaving directory '/workspace/HoofTTY'
+mkdir -p build
+cc -std=c11 -O2 -Wall -Wextra -Werror -I../HoofTTY/include -I../HoofTTY/third_party/limine tests/pixels.c ../HoofTTY/kernel/drivers/framebuffer.c -o build/pixels-test
+./build/pixels-test
+PASS graphics: clipping, padding canaries, RGB masks, invalid glyph, terminal suspension
+make -C ../HoofTTY build/runtime-test build/framebuffer-test build/memory-span-test
+make[1]: Entering directory '/workspace/HoofTTY'
+make[1]: 'build/runtime-test' is up to date.
+make[1]: 'build/framebuffer-test' is up to date.
+make[1]: 'build/memory-span-test' is up to date.
+make[1]: Leaving directory '/workspace/HoofTTY'
+../HoofTTY/build/runtime-test
+PASS runtime: overlap matrix, copy/fill canaries, comparison selftest
+memmove cases: 12464
+../HoofTTY/build/framebuffer-test
+PASS framebuffer: RGB order, glyph pixels, pitch/edge canaries, wrapping, 11 invalid layouts
+../HoofTTY/build/memory-span-test
+PASS memory span: unaligned usable/reserved, zero, boundaries, overflow
+python3 tests/qemu_smoke.py "../HoofTTY"
+Traceback (most recent call last):
+  File "/workspace/ThePonyDesktop/tests/qemu_smoke.py", line 67, in <module>
+    px=screen('dragged');assert px(65,65)==bytes.fromhex('244754');assert px(165,145)==bytes.fromhex('345c80')
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+make: *** [Makefile:18: test] Error 1
+make: Leaving directory '/workspace/ThePonyDesktop'

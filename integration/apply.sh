@@ -4,11 +4,11 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 host=$(CDPATH= cd -- "${1:?usage: apply.sh /path/to/HoofTTY}" && pwd)
 # Never reset or overwrite user modifications. git apply checks all hunks first.
-if git -C "$host" apply --reverse --check "$root/integration/hooftty-v0.1.0.patch" 2>/dev/null; then
+if git -C "$host" apply --reverse --check "$root/integration/hooftty-v0.1.1.patch" 2>/dev/null; then
     echo 'HoofTTY interface patch already applied'
 else
-    git -C "$host" apply --check "$root/integration/hooftty-v0.1.0.patch"
-    git -C "$host" apply "$root/integration/hooftty-v0.1.0.patch"
+    git -C "$host" apply --check "$root/integration/hooftty-v0.1.1.patch"
+    git -C "$host" apply "$root/integration/hooftty-v0.1.1.patch"
 fi
 if [ -e "$host/apps/tpd.c" ]; then
     cmp "$root/src/tpd.c" "$host/apps/tpd.c" || {
