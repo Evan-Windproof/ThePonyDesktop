@@ -1,0 +1,275 @@
+diff --git a/Makefile b/Makefile
+index 0e1bc27..fae9369 100644
+--- a/Makefile
++++ b/Makefile
+@@ -117,7 +117,7 @@ clean:
+ -include config.local.mk
+ -include $(OBJECTS:.o=.d)
+ 
+-APPS := hello counter probe privileged kernelread kernelwrite badflags badstack
++APPS := tpd hello counter probe privileged kernelread kernelwrite badflags badstack
+ $(BUILD)/apps/%.elf: apps/%.c apps/abi.h apps/linker.ld Makefile
+ 	@mkdir -p $(@D)
+ 	$(CC) -std=c11 -O2 -ffreestanding -fno-builtin -fno-stack-protector -fno-pie -no-pie -mno-red-zone -mgeneral-regs-only -mcmodel=large -nostdlib -static -Wl,--build-id=none -Wl,-T,apps/linker.ld $< -o $@
+diff --git a/include/kernseed/keyboard.h b/include/kernseed/keyboard.h
+index 7f2634f..adc6820 100644
+--- a/include/kernseed/keyboard.h
++++ b/include/kernseed/keyboard.h
+@@ -7,5 +7,7 @@ struct keyboard_diagnostics {uint64_t ready,irqs,bytes,dropped,errors;};
+ extern volatile struct keyboard_diagnostics keyboard_state;
+ bool keyboard_init(void);
+ void keyboard_irq(void);
++/* Drain shared i8042 output with interrupts disabled. */
++void keyboard_poll(void);
+ int keyboard_getchar(void);
+ #endif
+diff --git a/kernel/drivers/framebuffer.c b/kernel/drivers/framebuffer.c
+index 622953d..294b779 100644
+--- a/kernel/drivers/framebuffer.c
++++ b/kernel/drivers/framebuffer.c
+@@ -2,6 +2,9 @@
+ #include <kernseed/console.h>
+ #include <limine.h>
+ #include <stddef.h>
++#include <stdbool.h>
++static bool display_paused;
++#include <kernseed/pixels.h>
+ 
+ /* Original 5x7 bitmap alphabet. Lowercase is displayed as uppercase.
+  * Each row occupies five low bits, leftmost pixel in bit 4. No font dependency. */
+@@ -95,7 +98,7 @@ bool framebuffer_init(struct limine_framebuffer *fb) {
+     return true;
+ }
+ void framebuffer_putc(char c) {
+-    if (!screen) return;
++    if (!screen || display_paused) return;
+     if (c == '\r') { column = 0; return; }
+     if (c == '\n') { column = 0; ++row; }
+     else {
+@@ -204,3 +207,24 @@ void framebuffer_draw_sprite(
+     }
+ }
+ 
++
++/* Bounded graphics primitives; no framebuffer address is exported to users. */
++uint64_t pixels_size(void){return screen ? screen->width | (screen->height<<16) : 0;}
++static uint32_t native_rgb(uint32_t c){
++    return ((c>>16)&255)<<screen->red_mask_shift |
++           ((c>>8)&255)<<screen->green_mask_shift | (c&255)<<screen->blue_mask_shift;
++}
++void pixels_rect(unsigned x,unsigned y,unsigned w,unsigned h,uint32_t rgb){
++    if(!screen || x>=screen->width || y>=screen->height)return;
++    if(w>screen->width-x)w=screen->width-x;
++    if(h>screen->height-y)h=screen->height-y;
++    uint32_t c=native_rgb(rgb);
++    for(unsigned j=0;j<h;j++)for(unsigned i=0;i<w;i++)pixel(x+i,y+j,c);
++}
++void pixels_glyph(unsigned x,unsigned y,unsigned c,uint32_t rgb){
++    if(c>=128)return;
++    for(unsigned j=0;j<7;j++)for(unsigned i=0;i<5;i++)
++        if(font[c][j]&(1U<<(4-i)))pixels_rect(x+i*2,y+j*2,2,2,rgb);
++}
++
++void pixels_pause(bool paused){display_paused=paused;}
+diff --git a/kernel/drivers/keyboard.c b/kernel/drivers/keyboard.c
+index aed865f..8fcf15f 100644
+--- a/kernel/drivers/keyboard.c
++++ b/kernel/drivers/keyboard.c
+@@ -1,6 +1,7 @@
+ /* SPDX-License-Identifier: GPL-3.0-or-later */
+ #include <kernseed/keyboard.h>
+ #include <kernseed/io.h>
++#include <kernseed/graphics.h>
+ #define RING_SIZE 256
+ static char ring[RING_SIZE];
+ static volatile unsigned head,tail;
+@@ -45,12 +46,12 @@ static void enqueue(char c){
+     if(next==tail){keyboard_state.dropped++;discard=1;overflow_event=1;return;}
+     ring[head]=c;__asm__ volatile("":::"memory");head=next;
+ }
+-void keyboard_irq(void){
+-    keyboard_state.irqs++;
++void keyboard_poll(void){
+     for(unsigned i=0;i<32;i++){
+         uint8_t status=inb(0x64);if(!(status&1))break;
+         uint8_t code=inb(0x60);keyboard_state.bytes++;
+-        if(status&0xe0){keyboard_state.errors++;continue;}
++        if(status&0xc0){keyboard_state.errors++;continue;}
++        if(status&0x20){mouse_byte(code);continue;}
+         if(pause_bytes){pause_bytes--;continue;}
+         if(code==0xe1){pause_bytes=5;continue;}
+         if(code==0xe0){extended=1;continue;}
+@@ -72,3 +73,5 @@ int keyboard_getchar(void){
+     int c=-1;if(overflow_event){tail=head;overflow_event=0;c=127;}else if(tail!=head){c=(unsigned char)ring[tail];tail=(tail+1)%RING_SIZE;}
+     __asm__ volatile("pushq %0; popfq"::"r"(flags):"memory","cc");return c;
+ }
++
++void keyboard_irq(void){keyboard_state.irqs++;keyboard_poll();}
+diff --git a/kernel/syscall/user.c b/kernel/syscall/user.c
+index 325a8df..d934649 100644
+--- a/kernel/syscall/user.c
++++ b/kernel/syscall/user.c
+@@ -4,15 +4,17 @@
+ #include <kernseed/shell.h>
+ #include <kernseed/runtime.h>
+ #include <kernseed/console.h>
++#include <kernseed/graphics.h>
+ volatile struct user_diagnostics user_state;
+ static uint64_t code_page,stack_page;
+ #define APP(n) extern const unsigned char app_##n##_start[],app_##n##_end[]
+-APP(hello);APP(counter);APP(probe);APP(privileged);APP(kernelread);APP(kernelwrite);APP(badflags);APP(badstack);
++APP(tpd);APP(hello);APP(counter);APP(probe);APP(privileged);APP(kernelread);APP(kernelwrite);APP(badflags);APP(badstack);
+ extern _Noreturn void user_enter(uint64_t rip,uint64_t rsp);
+ static _Noreturn void start(void){kernel_tss.rsp[0]=tasks[sched_state.current].high;user_enter(USER_CODE,USER_STACK+4096-8);}
+ bool user_rsp_valid(uint64_t rsp){return user_state.active&&user_state.slot==sched_state.current&&rsp>=USER_STACK&&rsp<USER_STACK+4096;}
+ void user_reap(unsigned slot){
+     if(!user_state.active||slot!=user_state.slot)return;
++    graphics_close();
+     if(!vmm_unmap(USER_CODE)||!vmm_unmap(USER_STACK)||!pmm_free(code_page)||!pmm_free(stack_page)){
+         const char *s="PANIC: user resource reclamation failed\n";while(*s)serial_putc(*s++);cpu_halt();
+     }
+@@ -28,7 +30,7 @@ int user_run(const char *name){
+     }
+     const unsigned char *begin=0,*end=0;const char *stable_name=0;
+ #define PICK(n) if(shell_equal(name,#n)){begin=app_##n##_start;end=app_##n##_end;stable_name=#n;}
+-    PICK(hello) PICK(counter) PICK(probe) PICK(privileged) PICK(kernelread) PICK(kernelwrite) PICK(badflags) PICK(badstack)
++    PICK(tpd) PICK(hello) PICK(counter) PICK(probe) PICK(privileged) PICK(kernelread) PICK(kernelwrite) PICK(badflags) PICK(badstack)
+     uintptr_t first=(uintptr_t)begin,last=(uintptr_t)end;
+     if(!begin||last<=first||last-first>4096){
+         __asm__ volatile("pushq %0; popfq"::"r"(flags):"memory","cc");return -1;
+@@ -75,6 +77,11 @@ void syscall_dispatch(struct interrupt_frame *f){
+     case 1:f->rax=api_ticks();return;
+     case 2:task_yield();f->rax=0;return;
+     case 3:api_exit();
++    case 4:f->rax=graphics_open();return;
++    case 5:f->rax=graphics_draw(f->rdi,f->rsi,false);return;
++    case 6:f->rax=graphics_input();return;
++    case 7:graphics_close();f->rax=0;return;
++    case 8:f->rax=graphics_draw(f->rdi,f->rsi,true);return;
+     default:f->rax=(uint64_t)-38;user_state.invalid++;return;
+     }
+ }
+diff --git a/shell/commands/apps.c b/shell/commands/apps.c
+index 8c6836e..0862d7e 100644
+--- a/shell/commands/apps.c
++++ b/shell/commands/apps.c
+@@ -1,5 +1,5 @@
+ /* SPDX-License-Identifier: GPL-3.0-or-later */
+ #include <kernseed/shell.h>
+ #include <kernseed/terminal.h>
+-static int apps(int argc,char **argv){(void)argc;(void)argv;terminal_write("hello counter probe privileged kernelread kernelwrite badflags badstack\n");return 0;}
++static int apps(int argc,char **argv){(void)argc;(void)argv;terminal_write("tpd hello counter probe privileged kernelread kernelwrite badflags badstack\n");return 0;}
+ REGISTER_COMMAND(apps_command,"apps","List embedded native applications","apps",0,0,apps);
+diff --git a/include/kernseed/graphics.h b/include/kernseed/graphics.h
+new file mode 100644
+index 0000000..d0f0529
+--- /dev/null
++++ b/include/kernseed/graphics.h
+@@ -0,0 +1,12 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later */
++#ifndef TPD_GRAPHICS_H
++#define TPD_GRAPHICS_H
++#include <stdint.h>
++#include <stdbool.h>
++extern bool graphics_owned;
++long graphics_open(void);
++void graphics_close(void);
++long graphics_draw(uint64_t box,uint64_t rgb,bool glyph);
++long graphics_input(void);
++void mouse_byte(uint8_t byte);
++#endif
+diff --git a/include/kernseed/pixels.h b/include/kernseed/pixels.h
+new file mode 100644
+index 0000000..f40c2e7
+--- /dev/null
++++ b/include/kernseed/pixels.h
+@@ -0,0 +1,11 @@
++#ifndef TPD_PIXELS_H
++#define TPD_PIXELS_H
++#include <stdbool.h>
++/* SPDX-License-Identifier: GPL-3.0-or-later */
++#include <stdint.h>
++uint64_t pixels_size(void);
++void pixels_rect(unsigned x,unsigned y,unsigned w,unsigned h,uint32_t rgb);
++void pixels_glyph(unsigned x,unsigned y,unsigned c,uint32_t rgb);
++
++void pixels_pause(bool paused);
++#endif
+diff --git a/kernel/drivers/graphics.c b/kernel/drivers/graphics.c
+new file mode 100644
+index 0000000..f51b9ad
+--- /dev/null
++++ b/kernel/drivers/graphics.c
+@@ -0,0 +1,72 @@
++/* SPDX-License-Identifier: GPL-3.0-or-later */
++#include <kernseed/graphics.h>
++#include <kernseed/pixels.h>
++#include <kernseed/console.h>
++#include <kernseed/keyboard.h>
++#include <kernseed/io.h>
++#include <kernseed/scheduler.h>
++bool graphics_owned;
++static unsigned width,height,buttons,part;
++static int mx,my;
++static uint8_t packet[3];
++static bool ready;
++static bool wait_in(void){for(unsigned i=0;i<100000;i++)if(!(inb(0x64)&2))return true;return false;}
++static bool cmd(uint8_t c){if(!wait_in())return false;outb(0x64,c);return true;}
++static bool aux(uint8_t c){
++    if(!cmd(0xd4)||!wait_in())return false;
++    outb(0x60,c);
++    for(unsigned i=0;i<100000;i++){
++        unsigned s=inb(0x64);
++        if(s&1){unsigned b=inb(0x60);if(s&0x20)return !(s&0xc0)&&b==0xfa;}
++    }
++    return false;
++}
++void mouse_byte(uint8_t b){
++    if(!graphics_owned)return;
++    if(!part&&!(b&8))return;
++    packet[part++]=b;if(part<3)return;part=0;
++    if(packet[0]&0xc0)return; /* overflow: discard the whole packet */
++    int dx=(int)packet[1]-((packet[0]&0x10)?256:0);
++    int dy=(int)packet[2]-((packet[0]&0x20)?256:0);
++    mx+=dx;my-=dy;
++    if(mx<0)mx=0;
++    if(my<0)my=0;
++    if(mx>=(int)width)mx=(int)width-1;
++    if(my>=(int)height)my=(int)height-1;
++    buttons=packet[0]&7;
++}
++long graphics_open(void){
++    if(graphics_owned)return -16;
++    uint64_t size=pixels_size();width=size&65535;height=(size>>16)&65535;
++    if(width<400||height<300)return -19;
++    /* Syscalls enter with IF clear. AUX IRQ stays masked; poll at 100 Hz.
++       IRQ1 also routes AUX bytes so keyboard and mouse never steal packets. */
++    if(!cmd(0xa8))return -19;
++    if(!aux(0xf6)||!aux(0xf4)){cmd(0xa7);return -19;}
++    mx=width/2;my=height/2;buttons=part=0;
++    while(keyboard_getchar()!=-1){}
++    graphics_owned=ready=true;pixels_pause(true);
++    return (long)size;
++}
++void graphics_close(void){
++    if(!graphics_owned)return;
++    cmd(0xa7);ready=graphics_owned=false;pixels_pause(false);part=buttons=0;
++    /* Drain pending AUX bytes without discarding keyboard state. */
++    keyboard_poll();while(keyboard_getchar()!=-1){}
++    framebuffer_clear();
++}
++long graphics_draw(uint64_t b,uint64_t c,bool glyph){
++    if(!graphics_owned)return -1;
++    unsigned x=b&65535,y=(b>>16)&65535,w=(b>>32)&65535,h=b>>48;
++    if(glyph)pixels_glyph(x,y,c&255,(c>>8)&0xffffff);
++    else pixels_rect(x,y,w,h,c&0xffffff);
++    return 0;
++}
++long graphics_input(void){
++    if(!ready)return -1;
++    keyboard_poll();
++    int key=keyboard_getchar();
++    uint64_t event=(unsigned)mx|((uint64_t)(unsigned)my<<16)|((uint64_t)buttons<<32)|((uint64_t)(key<0?0:key)<<40);
++    task_sleep(1);
++    return (long)event;
++}
