@@ -1,0 +1,5 @@
+0xffffffff80002652 in pixels_rect (x=0, y=<optimized out>, w=<optimized out>, h=<optimized out>, rgb=<optimized out>) at kernel/drivers/framebuffer.c:250
+250	    for(unsigned j=0;j<h;j++)for(unsigned i=0;i<w;i++)pixel(x+i,y+j,c);
+$1 = {slot = 0x4, active = 0x1, calls = 0x6, last_cs = 0x2b, last_rsp = 0xffffc00001100f70, last_number = 0x5, exits = 0x1, faults = 0x0, vector = 0x0, error = 0x0, cr2 = 0x0, invalid = 0x0, preemptions = 0x0, fault_rip = 0x0}
+$2 = true
+[Inferior 1 (process 1) detached]

@@ -1,10 +1,17 @@
+.DEFAULT_GOAL := all
 # SPDX-License-Identifier: GPL-3.0-or-later
 HOOFTTY ?= ../HoofTTY
 CC ?= cc
-.PHONY: all integrate check test run
+.PHONY: all integrate check test run check-integration version check-version
+version:
+	@cat VERSION
+check-version:
+	python3 scripts/version.py
+check-integration:
+	python3 tests/integration.py "$(HOOFTTY)"
 all: integrate
 	$(MAKE) -C $(HOOFTTY) iso check
-integrate:
+integrate: check-version
 	./integration/apply.sh "$(HOOFTTY)"
 check: integrate
 	mkdir -p build
@@ -14,7 +21,7 @@ check: integrate
 	$(HOOFTTY)/build/runtime-test
 	$(HOOFTTY)/build/framebuffer-test
 	$(HOOFTTY)/build/memory-span-test
-test: all check
+test: check-integration all check
 	python3 tests/qemu_smoke.py "$(HOOFTTY)"
 run: all
 	$(MAKE) -C $(HOOFTTY) run

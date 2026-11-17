@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix='tpd-') as d:
                 return tuple(map(int,m.groups()))
             baseline=memory()
             for cycle in range(2):
-                cmd('run tpd','Ring 3 desktop ready')
+                cmd('run tpd','TPD v'+(Path(__file__).resolve().parents[1]/'VERSION').read_text().strip()+': Ring 3 desktop ready')
                 if cycle==0:
                     # Read actual guest diagnostics while stopped, without modifying state.
                     q.command('stop')
@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory(prefix='tpd-') as d:
                 wait_for(lambda:'hoof> ' in serial.read_text()[n:],p,'Shell restore')
                 cmd('echo restored','restored\n');assert memory()==baseline,'user pages or task stack not reclaimed'
             # Third session exits through the taskbar, independently of Q.
-            cmd('run tpd','Ring 3 desktop ready');move(100,100);move(100,100);move(100,85);move(45,0)
+            cmd('run tpd','TPD v'+(Path(__file__).resolve().parents[1]/'VERSION').read_text().strip()+': Ring 3 desktop ready');move(100,100);move(100,100);move(100,85);move(45,0)
             n=len(serial.read_text());button(True);button(False)
             wait_for(lambda:'hoof> ' in serial.read_text()[n:],p,'taskbar exit')
             assert memory()==baseline

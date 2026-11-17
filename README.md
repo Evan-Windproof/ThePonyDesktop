@@ -1,4 +1,4 @@
-# The Pony Desktop v0.1.1
+# The Pony Desktop v0.1.2
 
 HoofTTY 的实验性原生 Ring 3 图形桌面，以 C 实现，不使用宿主操作系统图形 API。
 
@@ -17,12 +17,24 @@ HoofTTY 现有加载器分配代码页和栈页，以 Ring 3 启动应用；显�
 代码页为 User/RX，栈为 User/RW/NX，各 4 KiB；只有一个活跃用户任务，共享 CR3。
 不能将其描述为独立进程地址空间、动态加载软件或完整桌面环境。
 
-详见 [源码审计与方案](docs/architecture.md)、[接口](docs/abi.md)、[测试记录](docs/validation.md)。
+详见 [源码审计与方案](docs/architecture.md)、[接口](docs/abi.md)、[当前升级测试](docs/v0.1.2.md)（[v0.1.0运行记录](docs/validation.md)）。
 
-## v0.1.1 修复
+## v0.1.2 集成与升级
 
-参见 [v0.1.1 改动与实测](docs/v0.1.1.md)。保留 Ring 3 桌面逻辑，新增可选后备缓冲 ABI；改善 PS/2 输入延迟与按钮边沿保留。
-从 v0.1.0 升级请对**未应用旧接口补丁的 HoofTTY 基线检出**应用新补丁；脚本不会自动回滚或覆盖旧检出的本地修改。旧补丁保留供历史参考，勿叠加应用。
+[升级设计、测试及限制](docs/v0.1.2.md)。本版本不改动图形或输入算法。
+`integration/manage.py` 先完整识别原始基线、v0.1.0、v0.1.1 或已安装v0.1.2，再决定写入。
+已知旧桌面源码可以升级；未知本地修改会在写入前拒绝，仓库其他文件及暂存区保持不变。
+
+```sh
+./integration/apply.sh ../HoofTTY --check   # 只读预检
+./integration/apply.sh ../HoofTTY           # 安装/升级；输出恢复备份路径
+make version
+make check-integration
+```
+
+版本信息以 `VERSION` 为源。`python3 scripts/version.py --set 0.1.3` 同步更新README标题；
+集成时生成 `apps/tpd_version.h`，源码启动消息和任务栏共用此宏，Makefile依赖确保改版本后重编译应用。
+历史补丁和测试记录保持原版本，不做全仓库字符串替换。
 
 ## 构建
 
@@ -41,10 +53,14 @@ make test HOOFTTY=../HoofTTY
 make run HOOFTTY=../HoofTTY
 ```
 
-`make` 应用 [内核接口补丁](integration/hooftty-v0.1.1.patch)，复制应用源码后调用 HoofTTY 原有构建。
-`integration/apply.sh` 可重复执行；补丁冲突、ABI 不匹配或已存在的不同 `apps/tpd.c` 会报错，避免覆盖修改。
-请先保存自己的改动。修改 TPD 后，需要自行核对并同步 `src/tpd.c` 到 HoofTTY 的 `apps/tpd.c`；脚本不会覆盖不同内容。
-更新版本的 HoofTTY 不保证能直接应用补丁，应先审阅接口差异。
+`make` 调用集成管理器，使用经过核对的历史接口补丁构造目标文件集；不要再手工叠加补丁。
+需要本地 HoofTTY Git 对象中存在上述基线提交，缺失或出现未知接口状态时会安全报错。
+当前版本沿用 v0.1.1 内核图形接口，只增加应用版本头的构建依赖。
+Python 3 是集成脚本的必要工具；源码包包含旧版应用的哈希和回归测试夹具，不要求TPD完整Git历史。
+
+预检会验证全部受管理文件、ABI和应用源码，再备份并逐文件替换。遇到未知修改请先自行保存并合并，
+不要使用 reset 清理自己的工作。普通异常会回滚；断电/SIGKILL等中断不保证自动恢复，详见升级文档。
+直接修改 TPD 后再次运行集成，已安装的不同源码会被视为未知修改，请先自行核对同步；脚本不会覆盖开发中的代码。
 
 产物：`HoofTTY/build/apps/tpd.elf`、`tpd.bin`、`HoofTTY/build/kernseed.iso`。
 在客户机 Shell 输入：

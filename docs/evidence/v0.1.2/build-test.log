@@ -1,0 +1,48 @@
+python3 tests/integration.py "../HoofTTY"
+...........Interface: base; target TPD 0.1.2; 12 file(s) to update
+Recovery backup: /tmp/tpd-backup-uogwluea
+.
+----------------------------------------------------------------------
+Ran 12 tests in 8.353s
+
+OK
+python3 scripts/version.py
+0.1.2
+./integration/apply.sh "../HoofTTY"
+Interface: 0.1.2; target TPD 0.1.2; 0 file(s) to update
+make -C ../HoofTTY iso check
+make[1]: Entering directory '/workspace/HoofTTY'
+HOST_CC="cc" ./scripts/fetch-limine.sh
+limine.h: OK
+limine.c: OK
+limine-bios-hdd.h: OK
+limine-bios.sys: OK
+limine-bios-cd.bin: OK
+limine-uefi-cd.bin: OK
+BOOTX64.EFI: OK
+LICENSE: OK
+make[2]: Entering directory '/workspace/HoofTTY/.cache/limine'
+make[2]: 'limine' is up to date.
+make[2]: Leaving directory '/workspace/HoofTTY/.cache/limine'
+python3 tests/check_elf.py build/kernseed.elf
+PASS ELF: static x86-64, no unresolved symbols, no RWX segment
+make[1]: Leaving directory '/workspace/HoofTTY'
+mkdir -p build
+cc -std=c11 -O2 -Wall -Wextra -Werror -I../HoofTTY/include -I../HoofTTY/third_party/limine tests/pixels.c ../HoofTTY/kernel/drivers/framebuffer.c -o build/pixels-test
+./build/pixels-test
+PASS graphics: clipping, padding canaries, RGB masks, invalid glyph, terminal suspension
+make -C ../HoofTTY build/runtime-test build/framebuffer-test build/memory-span-test
+make[1]: Entering directory '/workspace/HoofTTY'
+make[1]: 'build/runtime-test' is up to date.
+make[1]: 'build/framebuffer-test' is up to date.
+make[1]: 'build/memory-span-test' is up to date.
+make[1]: Leaving directory '/workspace/HoofTTY'
+../HoofTTY/build/runtime-test
+PASS runtime: overlap matrix, copy/fill canaries, comparison selftest
+memmove cases: 12464
+../HoofTTY/build/framebuffer-test
+PASS framebuffer: RGB order, glyph pixels, pitch/edge canaries, wrapping, 11 invalid layouts
+../HoofTTY/build/memory-span-test
+PASS memory span: unaligned usable/reserved, zero, boundaries, overflow
+python3 tests/qemu_smoke.py "../HoofTTY"
+PASS: boot, Shell, hello, desktop three times, CPL3 GDB evidence, resource reclamation, taskbar exit, pixels, mouse drag/close, q exit, Shell recovery, privileged fault containment.
